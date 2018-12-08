@@ -33,7 +33,7 @@ def _get_one_action(data):
         dividends = DataFrame(data['Dividends']).dropna()
         dividends["action"] = "DIVIDEND"
         dividends = dividends.rename(columns={'Dividends': 'value'})
-        actions = concat([actions, dividends]).sort_index(ascending=False)
+        actions = concat([actions, dividends], sort=False).sort_index(ascending=False)
 
     if 'Splits' in data.columns:
         # Add a label column so we can combine our two DFs

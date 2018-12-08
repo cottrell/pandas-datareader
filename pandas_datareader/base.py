@@ -1,20 +1,65 @@
 import time
 import warnings
+import logging
 import numpy as np
-
 import requests
-
+from ratelimit import sleep_and_retry, limits
 import pandas.compat as compat
 from pandas import DataFrame
 from pandas import read_csv, concat
 from pandas.io.common import urlencode
 from pandas.compat import StringIO, bytes_to_str
+import os
+import glob
+import json
+from pandas_datareader._utils import (RemoteDataError, SymbolWarning, _sanitize_dates, _init_session, config, _config_filename)
 
-from pandas_datareader._utils import (RemoteDataError, SymbolWarning,
-                                      _sanitize_dates, _init_session)
+_mydir = os.path.dirname(__file__)
+_static_snapshot_dir = os.path.join(_mydir, 'data')
+
+class _GetAvailableDatasetsWithStaticSnapshotMixin():
+    """
+    Generalize the notion of getting the list of datasets/symbols, optionally store in the code
+    """
+    def __init__(self, *args, **kwargs):
+        self._static_snapshot_filename = os.path.join(_static_snapshot_dir, self.__class__.__name__)
+    def get_available_datasets_from_static_snapshot(self):
+        """ load a static version, committed to git """
+        files = glob.glob(self._static_snapshot_filename + '*')
+        if not files:
+            raise Exception('no static snapshot! No file {}!'.format(self._static_snapshot_filename + '*'))
+        assert len(files) == 1
+        filename = files[0]
+        if filename.endswith('json'):
+            return json.load(open(filename))['datasets']
+        elif filename.endsiwth('csv'):
+            return pd.read_csv(filename)
+        else:
+            raise Exception('unknown format {}'.format(filename))
+    def _update_static_snapshot(self, values=None):
+        """
+        TODO: decide format of datasets. list or dict or something like that?
+        """
+        if not os.path.exists(_static_snapshot_dir):
+            os.makedirs(_static_snapshot_dir)
+        print("writing {}".format(self._static_snapshot_filename))
+        if values is None:
+            values = self.get_available_datasets()
+        if isinstance(values, pd.DataFrame):
+            values.to_csv(self._static_snapshot_filename + '.csv')
+        else:
+            values = {'datasets': values}
+            json.dump(values, open(self._static_snapshot_filename + '.json', 'w'), indent=4, sort_keys=True)
+    def get_available_datasets(self):
+        """
+        Can be dynamic call-out or a hard-coded list. Maybe both.
+        """
+        raise Exception('Not Implemented')
 
 
-class _BaseReader(object):
+_print_count = 0
+
+class _BaseReader(_GetAvailableDatasetsWithStaticSnapshotMixin):
     """
     Parameters
     ----------
@@ -33,14 +78,22 @@ class _BaseReader(object):
         requests.sessions.Session instance to be used
     freq : {str, None}
         Frequency to use in select readers
+    use_joblib_cache : {bool, False}
+        Optionally use the joblib cache for requests.
+    shelving : {bool, False}
+        When using joblib cache, call the call_and_shelve method instead vanilla call which returns the method.
     """
 
     _chunk_size = 1024 * 1024
     _format = 'string'
 
     def __init__(self, symbols, start=None, end=None,  retry_count=3,
-                 pause=0.1, timeout=30, session=None, freq=None):
+                 pause=0.1, timeout=30, session=None, freq=None,
+                 use_joblib_cache=None, use_ratelimit=None, ratelimit_period_seconds=None,
+                 ratelimit_calls=None,
+                 shelving=False):
 
+        global _print_count
         self.symbols = symbols
 
         start, end = _sanitize_dates(start, end)
@@ -55,6 +108,22 @@ class _BaseReader(object):
         self.pause_multiplier = 1
         self.session = _init_session(session, retry_count)
         self.freq = freq
+        super().__init__()
+        self._use_joblib_cache = use_joblib_cache if use_joblib_cache is not None else config.use_joblib_cache
+        self._use_ratelimit = use_ratelimit if use_ratelimit is not None else config.use_ratelimit
+        self._ratelimit_period_seconds = ratelimit_period_seconds if ratelimit_period_seconds is not None else config.ratelimit_period_seconds
+        self._ratelimit_calls = ratelimit_calls if ratelimit_calls is not None else config.ratelimit_calls
+        # there is pausing elsewhere but this is more safety
+        if self._use_ratelimit:
+            self._get_response = sleep_and_retry(limits(calls=self._ratelimit_calls, period=self._ratelimit_period_seconds)(self._get_response))
+        if self._use_joblib_cache:
+            from . import memory
+            if _print_count < 1:
+                logging.warn("Using joblib_cachedir {}. You can set this per-class instance or globally via the config file {}. See pandas_datareader/_util.py::config".format(memory.memory.location, _config_filename))
+                _print_count += 1
+            self._get_response = memory.memory.cache(self._get_response)
+            if shelving:
+                self._get_response = self._get_response.call_and_shelve
 
     def close(self):
         """Close network session"""
@@ -77,6 +146,23 @@ class _BaseReader(object):
             return self._read_one_data(self.url, self.params)
         finally:
             self.close()
+
+    def get_symbols(self, symbols=None, start=None, end=None):
+        """
+        Another accessor to pull specific symbols from the class instance.
+
+        For some reason, the original class construction involved specifying
+        the symbol list at construction time.
+        """
+        if symbols is not None:
+            self.symbols = symbols
+
+        start = start if start is not None else self.start
+        end = end if end is not None else self.end
+        start, end = _sanitize_dates(start, end)
+        self.start = start
+        self.end = end
+        return self.read()
 
     def _read_one_data(self, url, params):
         """ read one data from specified URL """
@@ -121,6 +207,9 @@ class _BaseReader(object):
             target URL
         params : dict or None
             parameters passed to the URL
+
+        THIS IS OPTIONALLY CACHED VIA JOBLIB see use_joblib_cache option in the base class.
+        There might be a better place to do the caching of the response in a way that does not require pickle.
         """
 
         # initial attempt + retry

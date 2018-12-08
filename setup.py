@@ -14,8 +14,12 @@ def readme():
 
 
 INSTALL_REQUIRES = (
-    ['pandas>=0.19.2', 'requests>=2.3.0', 'wrapt', 'lxml']
+    ['pandas>=0.19.2', 'requests>=2.3.0', 'wrapt', 'lxml', 'joblib']
 )
+
+# PIP is pretty bad now, nothing works via the dependency_links or install_requires.
+import os
+os.system('pip install https://github.com/avelkoski/FRB/archive/master.zip')
 
 setup(
     name=NAME,

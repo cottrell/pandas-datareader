@@ -9,3 +9,6 @@ ipython
 sphinx
 sphinx_rtd_theme
 requests-cache
+ratelimit
+joblib
+argh

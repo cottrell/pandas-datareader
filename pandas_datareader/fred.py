@@ -1,9 +1,62 @@
 from pandas_datareader.compat import is_list_like
-
+import pandas as pd
+import requests
 from pandas import concat, read_csv
-
 from pandas_datareader.base import _BaseReader
 
+import os
+import json
+import functools
+from ._utils import run_tasks_in_parallel
+
+def get_fred_api(tmp_cache=True):
+    filename = os.path.expanduser('~/.cred/fred/cred.json')
+    if os.path.exists(filename):
+        api_key = json.load(open(filename))['API_KEY']
+    else:
+        api_key = os.environ['FRED_API_KEY']
+    # do not use fredapi it is incomplete
+    # use: pip install FRB
+    from fred import Fred
+    if api_key is None:
+        raise Exception("no .cred/fred/cred.json['API_KEY'] or environ FRED_API_KEY found! Get one by signing up at the fred site.")
+    fred = Fred(api_key=api_key)
+    return fred
+
+def offset_paginator(fun, limit=1000):
+    """
+    fun(offset, limit)
+    """
+    limit = min(limit, 1000)
+    # pretty awful
+    offset = 0
+    n = 20
+    res = list()
+    while True:
+        offsets = range(offset, offset + limit * n, limit)
+        print(offsets)
+        tasks = [functools.partial(fun, o, limit) for o in offsets]
+        r = run_tasks_in_parallel(*tasks, max_workers=max(n, 20))
+        good = [x for x in r if x['exception'] is None]
+        good = [x['result'] for x in good if x['result'].shape[0] > 0]
+        res.extend(good)
+        if len(good) < len(r):
+            # stop when first encountering not all-perfect run
+            break
+        offset += limit * n
+    df = pd.concat(res, sort=False)
+    return df
+
+def get_series_by_tag(tag='daily'):
+    """
+    use ; separated list for many I think
+    attempts to paginate with some degree of parallism in chunks
+    """
+    fred = get_fred_api()
+    def fun(offset, limit):
+        print('getting {} {} for tag {}'.format(offset, limit, tag))
+        return fred.tag.series(tag, response_type='df', params=dict(offset=offset, limit=limit))
+    return offset_paginator(fun)
 
 class FredReader(_BaseReader):
     """
@@ -52,4 +105,15 @@ class FredReader(_BaseReader):
                 raise
         df = concat([fetch_data(url, n) for url, n in zip(urls, names)],
                     axis=1, join='outer')
+        return df
+
+    def get_available_datasets(self):
+        # or get_series_by_tag('daily;weekly;monthly;quarterly;annual')
+        # for k in ['daily', 'weekly', 'monthly', 'quarterly', 'annual']:
+        dfs = list()
+        for k in ['daily', 'weekly', 'monthly', 'annual']:
+            df = get_series_by_tag(k)
+            df['tag'] = k
+            dfs.append(df)
+        df = pd.concat(dfs, axis=0, sort=False)
         return df

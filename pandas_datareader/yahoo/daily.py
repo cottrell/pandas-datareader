@@ -1,4 +1,5 @@
 from __future__ import division
+import pandas as pd
 
 import json
 import re
@@ -7,6 +8,7 @@ from pandas import (DataFrame, to_datetime, notnull, isnull)
 from pandas_datareader._utils import RemoteDataError
 from pandas_datareader.base import _DailyBaseReader
 
+from ..memory import cached_requests_get
 
 class YahooDailyReader(_DailyBaseReader):
     """
@@ -172,10 +174,16 @@ class YahooDailyReader(_DailyBaseReader):
                 divs = divs.rename(columns={'Amount': 'Dividends'})
                 prices = prices.join(divs, how='outer')
 
+            def handle_splitratio(x):
+                if '/' in x:
+                    x = x.split('/')
+                    x = float(x[0]) / float(x[1])
+                else:
+                    x = float(x)
+                return x
             if 'SPLIT' in types:
                 splits = actions[actions.Type == 'SPLIT'].copy()
-                splits['SplitRatio'] = splits['Splitratio'].apply(
-                    lambda x: eval(x))
+                splits['SplitRatio'] = splits['Splitratio'].map(handle_splitratio)
                 splits = splits.reset_index(drop=True)
                 splits = splits.set_index('Date')
                 splits['Splits'] = 1.0 / splits['SplitRatio']
@@ -188,6 +196,12 @@ class YahooDailyReader(_DailyBaseReader):
                     prices['Dividends'] = prices['Dividends'] * adj
 
         return prices
+    def get_available_datasets(self):
+        # dunno better way
+        url = "https://datahub.io/cottrell/yahoo_tickers/r/yahoo_tickers.csv"
+        r = cached_requests_get(url, return_these=['text'])['text']
+        df = pd.read_csv(pd.compat.StringIO(r))
+        return df
 
 
 def _adjust_prices(hist_data, price_list=None):
@@ -225,3 +239,4 @@ def _calc_return_index(price_df):
         df.iloc[t_idx] = 1
 
     return df
+    

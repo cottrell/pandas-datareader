@@ -97,3 +97,101 @@ or
 
     $ git clone https://github.com/pydata/pandas-datareader.git
     $ python setup.py install
+
+
+New Workflow/API via helper and get_available_datasets
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    In [1]: import pandas_datareader as pdr
+
+    In [2]: pdr.helper
+    Out[2]:
+    _ReaderHelper
+    	.bankofcanada_BankOfCanadaReader
+    	.eurostat_EurostatReader
+    	.famafrench_FamaFrenchReader
+    	.fred_FredReader
+    	.google_options_Options
+    	.google_quotes_GoogleQuotesReader
+    	.iex_IEX
+    	.iex_daily_IEXDailyReader
+    	.iex_market_MarketReader
+    	.iex_ref_SymbolsReader
+    	.iex_stats_DailySummaryReader
+    	.iex_stats_MonthlySummaryReader
+    	.iex_stats_RecordsReader
+    	.iex_stats_RecentReader
+    	.iex_tops_TopsReader
+    	.iex_tops_LastReader
+    	.moex_MoexReader
+    	.oecd_OECDReader
+    	.robinhood_RobinhoodQuoteReader
+    	.robinhood_RobinhoodHistoricalReader
+    	.stooq_StooqDailyReader
+    	.tsp_TSPReader
+    	.wb_WorldBankReader
+    	.yahoo_actions_YahooActionReader
+    	.yahoo_actions_YahooDivReader
+    	.yahoo_actions_YahooSplitReader
+    	.yahoo_daily_YahooDailyReader
+    	.yahoo_fx_YahooFXReader
+    	.yahoo_options_Options
+    	.yahoo_quotes_YahooQuotesReader
+
+    In [3]: d = pdr.helper.yahoo_daily_YahooDailyReader.get_available_datasets()
+
+    In [4]: df = pdr.helper.yahoo_daily_YahooDailyReader.get_symbols('goog')
+
+    In [5]: df.shape
+    Out[5]: (2253, 6)
+
+
+Fred tag searches
+~~~~~~~~~~~~~~~~~
+
+Some starting points for crawling the Fred API.
+
+Note you can still get Fred data from Quandl for free. Not sure if that will change with the recent aquisition.
+
+.. code-block:: python
+
+        In [10]: import pandas_datareader.fred as fred
+
+        In [11]: d = fred.get_series_by_tag('daily;rate')
+        range(0, 20000, 1000)
+        getting 0 1000 for tag daily;rate
+        getting 1000 1000 for tag daily;rate
+        getting 2000 1000 for tag daily;rate
+        getting 3000 1000 for tag daily;rate
+        getting 4000 1000 for tag daily;rate
+        getting 5000 1000 for tag daily;rate
+        getting 6000 1000 for tag daily;rate
+        getting 7000 1000 for tag daily;rate
+        getting 8000 1000 for tag daily;rate
+        getting 9000 1000 for tag daily;rate
+        getting 10000 1000 for tag daily;rate
+        getting 11000 1000 for tag daily;rate
+        getting 12000 1000 for tag daily;rate
+        getting 13000 1000 for tag daily;rate
+        getting 14000 1000 for tag daily;rate
+        getting 15000 1000 for tag daily;rate
+        getting 16000 1000 for tag daily;rate
+        getting 17000 1000 for tag daily;rate
+        getting 18000 1000 for tag daily;rate
+        getting 19000 1000 for tag daily;rate
+
+        In [12]: d.head().T.head().T
+        Out[12]:
+          frequency frequency_short group_popularity           id         last_updated
+        0     Daily               D               69       AAA10Y  2018-12-13 21:51:03
+        1     Daily               D               43        AAAFF  2018-12-13 21:51:13
+        2     Daily               D                1  AB1020AAAMT  2018-12-13 15:11:03
+        3     Daily               D                1  AB1020AAVOL  2018-12-13 15:11:03
+        4     Daily               D                1    AB14AAAMT  2018-12-13 15:11:03
+
+        In [13]: d.shape
+        Out[13]: (471, 16)
+
+
