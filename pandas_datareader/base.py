@@ -115,15 +115,11 @@ class _BaseReader(_GetAvailableDatasetsWithStaticSnapshotMixin):
         self._ratelimit_calls = ratelimit_calls if ratelimit_calls is not None else config.ratelimit_calls
         # there is pausing elsewhere but this is more safety
         if self._use_ratelimit:
-            self._get_response = sleep_and_retry(limits(calls=self._ratelimit_calls, period=self._ratelimit_period_seconds)(self._get_response))
-        if self._use_joblib_cache:
-            from . import memory
-            if _print_count < 1:
-                logging.warn("Using joblib_cachedir {}. You can set this per-class instance or globally via the config file {}. See pandas_datareader/_util.py::config".format(memory.memory.location, _config_filename))
-                _print_count += 1
-            self._get_response = memory.memory.cache(self._get_response)
-            if shelving:
-                self._get_response = self._get_response.call_and_shelve
+            self._get_response_nocache = sleep_and_retry(limits(calls=self._ratelimit_calls, period=self._ratelimit_period_seconds)(self._get_response_nocache))
+        from . import memory
+        self._get_response_cached = memory.memory.cache(self._get_response_nocache)
+        if shelving:
+            self._get_response_cached = self._get_response_cached.call_and_shelve
 
     def close(self):
         """Close network session"""
@@ -200,6 +196,12 @@ class _BaseReader(_GetAvailableDatasetsWithStaticSnapshotMixin):
         return response.content
 
     def _get_response(self, url, params=None, headers=None):
+        if self._use_joblib_cache:
+            return self._get_response_cached(url, params=params, headers=headers)
+        else:
+            return self._get_response_nocache(url, params=params, headers=headers)
+
+    def _get_response_nocache(self, url, params=None, headers=None):
         """ send raw HTTP request to get requests.Response from the specified url
         Parameters
         ----------
