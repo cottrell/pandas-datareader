@@ -222,7 +222,10 @@ class _BaseReader(_GetAvailableDatasetsWithStaticSnapshotMixin):
             if response.status_code == requests.codes.ok:
                 return response
 
-            last_response_text = response.text.encode(response.encoding)
+            if response.encoding is None:
+                last_response_text = 'None'
+            else:
+                last_response_text = response.text.encode(response.encoding)
             time.sleep(pause)
 
             # Increase time between subsequent requests, per subclass.

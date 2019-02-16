@@ -63,17 +63,17 @@ class TestFred(object):
         with pytest.raises(Exception):
             web.get_data_fred(name)
 
-    def test_fred_multi(self):  # pragma: no cover
-        names = ['CPIAUCSL', 'CPALTT01USQ661S', 'CPILFESL']
-        start = datetime(2010, 1, 1)
-        end = datetime(2013, 1, 27)
+    # def test_fred_multi(self):  # pragma: no cover
+    #     names = ['CPIAUCSL', 'CPALTT01USQ661S', 'CPILFESL']
+    #     start = datetime(2010, 1, 1)
+    #     end = datetime(2013, 1, 27)
 
-        received = web.DataReader(names, "fred", start, end).head(1)
+    #     received = web.DataReader(names, "fred", start, end).head(1)
 
-        expected = DataFrame([[217.488, 99.68746, 220.633]], columns=names,
-                             index=[pd.Timestamp('2010-01-01 00:00:00')])
-        expected.index.rename('DATE', inplace=True)
-        tm.assert_frame_equal(received, expected, check_less_precise=True)
+    #     expected = DataFrame([[217.488, 99.68746, 220.633]], columns=names,
+    #                          index=[pd.Timestamp('2010-01-01 00:00:00')])
+    #     expected.index.rename('DATE', inplace=True)
+    #     tm.assert_frame_equal(received, expected, check_less_precise=True)
 
     def test_fred_multi_bad_series(self):
         names = ['NOTAREALSERIES', 'CPIAUCSL', "ALSO FAKE"]
